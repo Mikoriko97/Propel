@@ -87,15 +87,6 @@ Milestone lifecycle:
 - Infrastructure: Vite dev server, static build in `dist/`.
 - Backend preparation: `lib/supabase.ts`, `SUPABASE_MIGRATION.sql`.
 
-## Project structure
-```
-src/
-  components/ (Header, Footer, ProjectCard, ThemeToggle, CommentsSection, MilestoneTracker, PredictionModule, VerdictModule)
-  pages/ (LandingPage, ExploreMarketsPage, ProjectDetailsPage, DashboardPage, CreateProjectPage)
-  contexts/ (ThemeContext)
-  lib/ (supabase.ts)
-```
-
 ## Local development
 1. Install dependencies: `npm install`
 2. Start dev server: `npm run dev` → open `http://localhost:5174/`
@@ -120,3 +111,4 @@ Roles can be refined as needed; ping us on Discord for collaboration.
 - Transparency and trust: independent verification of milestones.
 - Fair rewards: rational distribution between creators and accurate forecasters.
 - Innovation without undue risk: funds unlock progressively for proven progress.
+
