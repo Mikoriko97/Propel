@@ -56,19 +56,20 @@ Milestone lifecycle:
 ## Roadmap: Six Waves of Delivery
 **Wave 1: MVP**
 - Focus: fastest launch of core functionality.
-- Contracts: baseline Rust/WASM smart contracts for Linera.
-- Constraints: one milestone per project, stablecoins only (USDC), centralized arbitration by the team.
+- Constraints: one milestone per project.
 - Payouts: 30% to the creator as a single tranche.
 - Result: functional platform with real bets.
 
-**Wave 2: Audit & Launch (Mainnet Launch)**
-- Security: professional contract audit.
-- Launch: deployment to Linera Mainnet.
-- Marketing: first 10–20 creators and 100–500 market participants.
+**Wave 2: Linera Integration & Wallet**
+- Linera Wallet integrated into the user profile.
+- Established connection to the Linera blockchain.
+- Implemented a smart contract for token transfers.
+- Partially enabled creation of user votes.
 
-**Wave 3: Decentralized Arbitration**
-- Jury: staking, reputation, appeals, slashing.
-- Tools: transparent voting, on‑chain proof protocols.
+**Wave 3: Voting & UX Enhancements**
+- Full operation of voting smart contracts using the native token.
+- UI/UX improvements for key flows and components.
+- Remaining planned items are shifted to Waves 4–6.
 
 **Wave 4: Tokenomics & Incentives**
 - Reward model: long‑term incentives, referral system, fee rebates.
@@ -87,6 +88,15 @@ Milestone lifecycle:
 - Infrastructure: Vite dev server, static build in `dist/`.
 - Backend preparation: `lib/supabase.ts`, `SUPABASE_MIGRATION.sql`.
 
+## Project structure
+```
+src/
+  components/ (Header, Footer, ProjectCard, ThemeToggle, CommentsSection, MilestoneTracker, PredictionModule, VerdictModule)
+  pages/ (LandingPage, ExploreMarketsPage, ProjectDetailsPage, DashboardPage, CreateProjectPage)
+  contexts/ (ThemeContext)
+  lib/ (supabase.ts)
+```
+
 ## Local development
 1. Install dependencies: `npm install`
 2. Start dev server: `npm run dev` → open `http://localhost:5174/`
@@ -94,8 +104,8 @@ Milestone lifecycle:
 
 ## Team & contacts
 **Discord handles:**
-- `@Mikoriko` 
-- `@Stech🥷` 
+- `Mikoriko` 
+- `Stech🥷` 
 - `RuslanSukhovii 🔥` 
 - `UCANSEE ✧ᴗ✧` 
 - `Lumin`
