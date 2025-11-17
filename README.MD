@@ -87,15 +87,6 @@ Milestone lifecycle:
 - Infrastructure: Vite dev server, static build in `dist/`.
 - Backend preparation: `lib/supabase.ts`, `SUPABASE_MIGRATION.sql`.
 
-## Project structure
-```
-src/
-  components/ (Header, Footer, ProjectCard, ThemeToggle, CommentsSection, MilestoneTracker, PredictionModule, VerdictModule)
-  pages/ (LandingPage, ExploreMarketsPage, ProjectDetailsPage, DashboardPage, CreateProjectPage)
-  contexts/ (ThemeContext)
-  lib/ (supabase.ts)
-```
-
 ## Local development
 1. Install dependencies: `npm install`
 2. Start dev server: `npm run dev` → open `http://localhost:5174/`
@@ -103,8 +94,8 @@ src/
 
 ## Team & contacts
 **Discord handles:**
-- `Mikoriko` 
-- `Stech🥷` 
+- `@Mikoriko` 
+- `@Stech🥷` 
 - `RuslanSukhovii 🔥` 
 - `UCANSEE ✧ᴗ✧` 
 - `Lumin`
