@@ -247,8 +247,7 @@ export function ProjectDetailsPage({ projectId }: { projectId?: string | null })
         {/* Comments Section */}
         <div className="mt-8">
           <CommentsSection 
-            projectId={project.id} 
-            isCreator={false} // In real app this would be determined based on current user
+            isCreator={false}
           />
         </div>
       </div>

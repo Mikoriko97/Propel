@@ -9,9 +9,9 @@ import {
   BarChart3, 
   DollarSign,
   Eye,
-  Users,
   ToggleLeft
 } from 'lucide-react';
+ 
 
 type UserRole = 'user' | 'investor';
 
@@ -29,17 +29,18 @@ interface InvestorStats {
   portfolioValue: number;
 }
 
-export function DashboardPage() {
+type AuthUser = { id: string; name: string; avatarUrl?: string };
+export function DashboardPage({ user }: { user?: AuthUser }) {
   const [userRole, setUserRole] = useState<UserRole>('user');
-  const [isConnected, setIsConnected] = useState(true); // For demo always connected
+  
 
-  // Mock user data
+  // Mock user data fallback when not provided
   const [userProfile] = useState({
-    name: 'Elena Kovalenko',
-    email: 'elena.kovalenko@example.com',
-    walletAddress: '0x742d35Cc6634C0532925a3b8D4C0532925a3b8D4',
+    name: user?.name ?? 'Guest',
+    email: user ? `${user.name?.toLowerCase().replace(/\s+/g, '.')}@example.com` : '—',
+    walletAddress: '—',
     joinedDate: new Date('2025-01-15'),
-    avatar: null,
+    avatar: user?.avatarUrl ?? null,
   });
 
   const userStats: UserStats = {
@@ -195,22 +196,27 @@ export function DashboardPage() {
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">
                   {userProfile.name}
                 </h2>
-                <div className="flex items-center gap-1 px-2 py-1 bg-emerald-light/10 text-emerald-dark dark:text-emerald-light text-xs rounded-full">
+                <div className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full ${user ? 'bg-emerald-light/10 text-emerald-dark dark:text-emerald-light' : 'bg-gray-200 dark:bg-gray-800 text-[var(--text-muted)]'}`}>
                   <Wallet className="w-3 h-3" />
-                  Connected
+                  {user ? 'Connected' : 'Not Connected'}
                 </div>
               </div>
               <p className="text-[var(--text-muted)] mb-2">{userProfile.email}</p>
               <div className="flex items-center gap-4 text-sm text-[var(--text-secondary)]">
-                <span>Wallet: {userProfile.walletAddress.slice(0, 6)}...{userProfile.walletAddress.slice(-4)}</span>
+                <span>Wallet: {user ? (user.name?.slice(0, 6) + '...' + (user.name?.slice(-4) || '')) : '—'}</span>
                 <span>Joined: {formatDate(userProfile.joinedDate)}</span>
               </div>
+              
             </div>
             <button className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
               <Settings className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        
+
+        
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -314,7 +320,7 @@ export function DashboardPage() {
                     </span>
                     {userRole === 'user' ? (
                       <>
-                        <span>Funding: ${item.funding.toLocaleString()}</span>
+                        <span>Funding: ${('funding' in item ? (item as any).funding : 0).toLocaleString()}</span>
                         <span>Progress: {(item as any).progress}%</span>
                       </>
                     ) : (

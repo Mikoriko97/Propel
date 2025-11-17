@@ -1,6 +1,5 @@
 import { Rocket, TrendingUp, Users, ArrowRight, Shield } from 'lucide-react';
 import { ProjectCard } from '../components/ProjectCard';
-import { Footer } from '../components/Footer';
 
 export function LandingPage({ onProjectClick }: { onProjectClick?: (id: string) => void }) {
   const handleProjectClick = (projectId: string) => {
@@ -265,7 +264,7 @@ export function LandingPage({ onProjectClick }: { onProjectClick?: (id: string) 
         </div>
       </section>
       
-      <Footer />
+      
     </div>
   );
 }

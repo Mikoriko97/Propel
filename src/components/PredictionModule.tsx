@@ -11,7 +11,6 @@ export function PredictionModule({ yesPool, noPool, onBet }: PredictionModulePro
   const [amount, setAmount] = useState('');
   const [selectedPosition, setSelectedPosition] = useState<'yes' | 'no' | null>(null);
 
-  const totalPool = yesPool + noPool;
   const calculatePotentialProfit = () => {
     const betAmount = parseFloat(amount) || 0;
     if (betAmount === 0 || !selectedPosition) return 0;

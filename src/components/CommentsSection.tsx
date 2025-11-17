@@ -14,11 +14,10 @@ interface Comment {
 }
 
 interface CommentsSectionProps {
-  projectId: string;
   isCreator?: boolean;
 }
 
-export function CommentsSection({ projectId, isCreator = false }: CommentsSectionProps) {
+export function CommentsSection({ isCreator = false }: CommentsSectionProps) {
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>([
     {
