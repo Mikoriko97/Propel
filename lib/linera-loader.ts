@@ -18,7 +18,7 @@ export async function loadLineraModule() {
         // Ініціалізуємо WASM
         if (typeof lineraModule.default === 'function') {
             const wasmUrl = `${baseUrl}/linera/linera_web_bg.wasm`;
-            await lineraModule.default(wasmUrl);
+            await lineraModule.default({ module_or_path: wasmUrl });
             console.log('[Linera Loader] WASM initialized successfully');
         }
 

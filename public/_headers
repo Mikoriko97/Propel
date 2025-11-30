@@ -1,4 +1,14 @@
-/
+/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/linera/linera_web_bg.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=31536000, immutable
+  Cross-Origin-Resource-Policy: same-origin
+
+/linera/linera_web.js
+  Cache-Control: public, max-age=31536000, immutable
   Cross-Origin-Resource-Policy: same-origin
