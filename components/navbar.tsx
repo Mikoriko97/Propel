@@ -20,7 +20,7 @@ export function Navbar() {
         const avatar = (u.user_metadata?.avatar_url as string) || '';
         supabase
           .from('profiles')
-          .upsert({ user_id: u.id, discord_nickname: nickname, discord_avatar_url: avatar }, { onConflict: 'user_id' });
+          .upsert({ id: u.id, user_id: u.id, discord_nickname: nickname, discord_avatar_url: avatar }, { onConflict: 'user_id' });
       }
     });
     return () => subscription.subscription.unsubscribe();

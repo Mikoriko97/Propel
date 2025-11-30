@@ -237,48 +237,32 @@ export function ProjectDetail({ id }: { id: string }) {
       return;
     }
 
-    const currentYes = Number(market?.yesPool || 0);
-    const currentNo = Number(market?.noPool || 0);
-    const currentTotal = Number(market?.total || 0);
-    const newYes = voteChoice === 'yes' ? currentYes + amt : currentYes;
-    const newNo = voteChoice === 'no' ? currentNo + amt : currentNo;
-    const newTotal = currentTotal + amt;
-    await supabase
+    const marketRes = await supabase
       .from('projects_markets')
-      .update({ yes_pool: newYes, no_pool: newNo, total: newTotal })
-      .eq('project_id', project?.id || id);
+      .select('yes_pool,no_pool,total')
+      .eq('project_id', project?.id || id)
+      .maybeSingle();
+    if (!marketRes.error && marketRes.data) {
+      setMarket({
+        yesPool: Number(marketRes.data.yes_pool || 0),
+        noPool: Number(marketRes.data.no_pool || 0),
+        total: Number(marketRes.data.total || 0),
+      });
+    }
 
-    const newRaised = Number(project?.raised || 0) + amt;
-    const newVotes = Number(project?.votes || 0) + 1;
-    await supabase
+    const projRes = await supabase
       .from('projects')
-      .update({ raised: newRaised, votes: newVotes })
-      .eq('id', project?.id || id);
-
-    setMarket({ yesPool: newYes, noPool: newNo, total: newTotal });
-    setProject((prev) =>
-      prev
-        ? { ...prev, raised: newRaised, votes: newVotes }
-        : { id, title: '', category: '', status: 'Active', raised: newRaised, votes: newVotes }
-    );
-    const today = new Date().toISOString().slice(0, 10);
-    const dpf = await supabase.from('daily_project_funds').select('amount').eq('date', today).maybeSingle();
-    if (!dpf.error && dpf.data) {
-      await supabase.from('daily_project_funds').update({ amount: Number(dpf.data.amount || 0) + amt }).eq('date', today);
-    } else {
-      await supabase.from('daily_project_funds').insert({ date: today, amount: amt });
-    }
-    const dif = await supabase.from('daily_investor_funds').select('amount').eq('date', today).maybeSingle();
-    if (!dif.error && dif.data) {
-      await supabase.from('daily_investor_funds').update({ amount: Number(dif.data.amount || 0) + amt }).eq('date', today);
-    } else {
-      await supabase.from('daily_investor_funds').insert({ date: today, amount: amt });
-    }
-    const dtv = await supabase.from('daily_total_volume').select('amount').eq('date', today).maybeSingle();
-    if (!dtv.error && dtv.data) {
-      await supabase.from('daily_total_volume').update({ amount: Number(dtv.data.amount || 0) + amt }).eq('date', today);
-    } else {
-      await supabase.from('daily_total_volume').insert({ date: today, amount: amt });
+      .select('raised,votes')
+      .eq('id', project?.id || id)
+      .maybeSingle();
+    if (!projRes.error && projRes.data) {
+      const newRaised = Number((projRes.data as any)?.raised || 0);
+      const newVotes = Number((projRes.data as any)?.votes || 0);
+      setProject((prev) =>
+        prev
+          ? { ...prev, raised: newRaised, votes: newVotes }
+          : { id, title: '', category: '', status: 'Active', raised: newRaised, votes: newVotes }
+      );
     }
 
     toast({ title: 'Vote accepted', description: 'Thank you for voting.' });

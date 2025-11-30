@@ -62,23 +62,6 @@ export default function SubmitProjectPage() {
       return;
     }
     const projId = String(inserted.data.id);
-    const mktInit = await supabase.from('projects_markets').insert({ project_id: projId, yes_pool: 0, no_pool: 0, total: 0 });
-    if (mktInit.error) {
-      // Не блокуємо процес, але попереджаємо
-      toast({ title: 'Warning', description: 'Project submitted, but failed to initialize market.' });
-    }
-    const msInit = await supabase.from('projects_milestones').insert({ project_id: projId, title: 'Milestone 1', success_criteria: [], deliverables: [], duration_days: 0 });
-    if (msInit.error) {
-      // Не блокуємо процес, але повідомляємо
-      toast({ title: 'Warning', description: 'Project submitted, but failed to create milestone.' });
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    const dpr = await supabase.from('daily_projects').select('count').eq('date', today).maybeSingle();
-    if (!dpr.error && dpr.data) {
-      await supabase.from('daily_projects').update({ count: Number(dpr.data.count || 0) + 1 }).eq('date', today);
-    } else {
-      await supabase.from('daily_projects').insert({ date: today, count: 1 });
-    }
     setSubmitting(false);
     toast({ title: 'Done', description: 'Project submitted for review.' });
     form.reset();

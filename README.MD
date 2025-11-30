@@ -83,18 +83,25 @@ Milestone lifecycle:
 - Integrations: wallets, indexers, analytics, partner DAOs.
 - Launch programs: curated listings, grants, accelerator.
 
-## Technical stack (current MVP)
-- Frontend: React + TypeScript (Vite), TailwindCSS, lucide‑react.
-- Infrastructure: Vite dev server, static build in `dist/`.
-- Backend preparation: `lib/supabase.ts`, `SUPABASE_MIGRATION.sql`.
-
 ## Project structure
 ```
-src/
-  components/ (Header, Footer, ProjectCard, ThemeToggle, CommentsSection, MilestoneTracker, PredictionModule, VerdictModule)
-  pages/ (LandingPage, ExploreMarketsPage, ProjectDetailsPage, DashboardPage, CreateProjectPage)
-  contexts/ (ThemeContext)
-  lib/ (supabase.ts)
+Propel/
+├─ app/                       # Next.js App Router pages and UI
+│  ├─ profile/page.tsx        # Profile, wallet creation, balance, updates
+│  ├─ api/                    # API routes (proxy-image, linera-balance)
+│  └─ ...
+├─ lib/
+│  ├─ linera-client.ts        # Integration with the Linera WASM client and service methods
+│  └─ linera-loader.ts        # HTTP loader for `public/linera/linera_web.js` + WASM
+├─ public/
+│  └─ linera/
+│     ├─ linera_web.js        # Built Linera client
+│     └─ linera_web_bg.wasm   # WASM module
+├─ @linera/client/dist/       # Local copy of the Linera client distribution (types/JS/WASM)
+├─ contracts/                 # Linera smart contract examples (fungible, crowd-funding, etc.)
+├─ components/                # UI components (shadcn/ui)
+├─ package.json               # Scripts and dependencies
+└─ .env                       # Environment configuration
 ```
 
 ## Local development

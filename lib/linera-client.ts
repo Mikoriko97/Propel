@@ -1,5 +1,6 @@
 import type { Signer } from '../@linera/client/dist/linera_web';
 import { getPublicKey, sign as secpSign, utils as secpUtils, hashes as secpHashes } from '@noble/secp256k1';
+import { loadLineraModule } from './linera-loader';
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -55,30 +56,38 @@ export class EvmSigner implements Signer {
   }
 }
 
+export class LineraSignerHelper {
+    static async loadMnemonic(): Promise<string | null> {
+        if (typeof window === 'undefined') return null;
+        return localStorage.getItem('linera_mnemonic');
+    }
+
+    static async createSigner(mnemonic: string): Promise<any> {
+        try {
+            const { PrivateKey } = await import('@linera/signer');
+            const signer = PrivateKey.fromMnemonic(mnemonic);
+            return signer;
+        } catch {
+            const { sha256 } = await import('@noble/hashes/sha2.js');
+            const encoder = new TextEncoder();
+            const hash = sha256(encoder.encode(mnemonic));
+            const priv = hash;
+            const { getPublicKey } = await import('@noble/secp256k1');
+            const pub = getPublicKey(priv, false);
+            const { keccak_256 } = await import('@noble/hashes/sha3.js');
+            const addrHash = keccak_256(pub.slice(1));
+            const addr = '0x' + Array.from(addrHash.slice(-20)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return new EvmSigner(priv, addr.toLowerCase());
+        }
+    }
+}
+
 export class LineraService {
   private static instance: LineraService;
   private wasmInitialized = false;
   private lineraModule: any = null;
-  // private wallet: any = null; // Removed to prevent stale reference usage
-  private ws: WebSocket | null = null;
-  private wsReconnectTimer: any = null;
   private client: any = null;
-  private validatorOverride: string | null = (process.env.NEXT_PUBLIC_LINERA_VALIDATOR_URL as string) || null;
-  private resolveValidatorBase(): string | null {
-    const o = this.validatorOverride;
-    if (!o) return null;
-    const host = (() => { try { return new URL(o).host; } catch { return ''; } })();
-    // If faucet is provided, keep using faucet (public network only)
-    if (host.includes('faucet.testnet-conway.linera.net')) {
-      return 'https://faucet.testnet-conway.linera.net';
-    }
-    return o;
-  }
-  // Default host: public Conway faucet (browser-friendly only for faucet ops)
-  private defaultHost = 'https://faucet.testnet-conway.linera.net';
-  // Faucet URL for wallet creation and chain claiming
-  private faucetUrl = 'https://faucet.testnet-conway.linera.net'; 
-  private defaultWs = 'wss://faucet.testnet-conway.linera.net/ws';
+  private faucetUrl = 'https://faucet.testnet-conway.linera.net';
 
   private constructor() {}
 
@@ -92,214 +101,32 @@ export class LineraService {
   async init() {
     if (this.wasmInitialized) return;
     
-    this.lineraModule = await import('../@linera/client/dist/linera_web.js');
-    if (typeof this.lineraModule.default === 'function') {
-      await this.lineraModule.default();
-    }
-    // Note: calling main() causes a WASM trap (unreachable), so we skip it for now.
-    // Logs should be handled by the client internally or via custom hooks if available.
-    /*
-    if (typeof this.lineraModule.main === 'function') {
-      try {
-        this.lineraModule.main();
-      } catch (e) {
-        console.warn('[Linera] Main entry point execution failed', e);
+    try {
+      // Use the loader instead of direct import
+      this.lineraModule = await loadLineraModule();
+      if (!this.lineraModule) {
+          throw new Error("Failed to load Linera module");
+      }
+    } catch (e) {
+      console.error('[Linera] Module load failed, trying fallback import', e);
+      // Fallback to direct import if loader fails (e.g. SSR)
+      this.lineraModule = await import('../@linera/client/dist/linera_web.js');
+      if (typeof this.lineraModule.default === 'function') {
+        await this.lineraModule.default();
       }
     }
-    */
+
     try {
       const { sha256 } = await import('@noble/hashes/sha2.js');
       const { hmac } = await import('@noble/hashes/hmac.js');
       secpHashes.sha256 = (msg: Uint8Array) => sha256(msg);
       secpHashes.hmacSha256 = (key: Uint8Array, message: Uint8Array) => hmac(sha256, key, message);
     } catch {}
+    
     this.wasmInitialized = true;
     console.log('[Linera] WASM initialized');
   }
 
-  private validateSigner(signer: EvmSigner) {
-    if (!signer) {
-      throw new Error('[Linera] Missing signer');
-    }
-    const hasMethods = typeof (signer as any).sign === 'function' && typeof (signer as any).containsKey === 'function';
-    if (!hasMethods || !signer.address) {
-      throw new Error('[Linera] Invalid signer');
-    }
-  }
-
-  private async ensureWalletReady(): Promise<any> {
-    await this.init();
-    // Always read from memory/storage to get a fresh wallet instance
-    let wallet = await this.lineraModule.InMemoryWallet.read();
-    
-    if (!wallet) {
-      console.warn('[Linera] No persisted wallet found. Please create a Linera wallet via faucet first.');
-      return null;
-    }
-    return wallet;
-  }
-
-  async createWalletAndClaimChain(): Promise<{
-    address: string;
-    microchain: string;
-    signer: EvmSigner;
-  }> {
-    await this.init();
-    const signer = await EvmSigner.generate();
-    const faucet = new this.lineraModule.Faucet(this.faucetUrl);
-    // Create a fresh wallet for claiming
-    const wallet = await faucet.createWallet();
-    const ownerStr = signer.address;
-    const chainId = await faucet.claimChain(wallet, ownerStr);
-    console.log('[Linera] Wallet created and chain claimed', { owner: ownerStr, chainId });
-    try {
-      const client = new this.lineraModule.Client(wallet, signer, false);
-      this.client = client;
-      try { await client.identity(); } catch {}
-      console.log('[Linera] Client prepared after claim');
-    } catch (e) {
-      console.warn('[Linera] Failed to prepare client after claim', e);
-    }
-    return { address: signer.address, microchain: chainId, signer };
-  }
-
-
-  async query<T>(
-    signer: EvmSigner,
-    query: string,
-    variables: Record<string, any> = {},
-    chainId?: string
-  ): Promise<T> {
-    await this.init();
-    const client = await this.getClient(signer, chainId);
-    if (typeof client.query === 'function') {
-        return await client.query({ query, variables });
-    }
-    throw new Error("Client does not support generic queries");
-  }
-
-  async primeClientFromStorage(signer: EvmSigner): Promise<boolean> {
-    await this.init();
-    this.validateSigner(signer);
-    try {
-      const wallet = await this.lineraModule.InMemoryWallet.read();
-      if (!wallet) return false;
-      const client = new this.lineraModule.Client(wallet, signer, false);
-      this.client = client;
-      try { await client.identity(); } catch {}
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async getClient(signer: EvmSigner, chainId?: string) {
-    await this.init();
-    this.validateSigner(signer);
-    if (this.client) {
-      return this.client;
-    }
-    
-    const wallet = await this.ensureWalletReady();
-    
-    if (!wallet) {
-        throw new Error('[Linera] Wallet is not initialized in persistent storage');
-    }
-
-    try {
-      const client = new this.lineraModule.Client(wallet, signer, false);
-      this.client = client;
-      console.log('[Linera] Client initialized', { address: signer.address, chainId: chainId || 'default' });
-      return client;
-    } catch (e: any) {
-      const msg = e?.message || String(e);
-      console.error('[Linera] Client initialization failed', msg);
-      throw new Error('[Linera] Client initialization failed');
-    }
-  }
-
-  async getApplication(signer: EvmSigner, applicationId: string, chainId?: string) {
-    // Direct GraphQL block removed per user directive to rely on WASM Client
-    /*
-    if (chainId) {
-       // ... (removed)
-    }
-    */
-
-    // Fallback to WASM Client (Standard Mode)
-    try {
-      await this.init();
-      const client = await this.getClient(signer, chainId);
-      const frontend = await client.frontend();
-      const app = await frontend.application(applicationId);
-      console.log('[Linera] Application loaded via WASM', { applicationId, chainId });
-      return app;
-    } catch (e) {
-      console.error('[Linera] Application load failed', e);
-      throw e;
-    }
-  }
-
-  async getTokenBalance(owner: string, applicationId: string, signer: EvmSigner, chainId?: string): Promise<string> {
-    // Direct GraphQL block removed
-    /*
-    if (chainId) {
-       // ... (removed)
-    }
-    */
-
-    // Use WASM Client
-    try {
-      const app = await this.getApplication(signer, applicationId, chainId);
-      // Try multiple key shapes to accommodate GraphQL input expectations
-      const shapes = [
-        `query { accounts { entry(key: "${owner}") { value } } }`,
-        `query { accounts { entry(key: { Address: "${owner}" }) { value } } }`,
-        `query { accounts { entry(key: { owner: { Address: "${owner}" }, index: 0 }) { value } } }`,
-      ];
-      for (const q of shapes) {
-        try {
-          const res = await app.query(q);
-          const parsed = typeof res === 'string' ? JSON.parse(res) : res;
-          const val = parsed?.data?.accounts?.entry?.value;
-          if (val != null) {
-            console.log('[Linera] Token balance query result', { owner, applicationId, value: val });
-            return String(val);
-          }
-        } catch {}
-      }
-      console.warn('[Linera] Token balance not found with known key shapes');
-      return '0';
-    } catch (e) {
-      console.error('[Linera] Token balance query failed', e);
-      return '0';
-    }
-  }
-
-  async getTickerSymbol(applicationId: string, signer: EvmSigner, chainId?: string): Promise<string> {
-    // Direct GraphQL block removed
-    /*
-    if (chainId) {
-        // ...
-    }
-    */
-
-    // Use WASM Client
-    try {
-      const app = await this.getApplication(signer, applicationId, chainId);
-      const query = `query { ticker_symbol }`;
-      const res = await app.query(query);
-      const parsed = typeof res === 'string' ? JSON.parse(res) : res;
-      const val = parsed?.data?.ticker_symbol;
-      console.log('[Linera] Ticker symbol', { applicationId, ticker: val });
-      return String(val ?? 'TLINERA');
-    } catch (e) {
-      console.error('[Linera] Ticker symbol query failed', e);
-      return 'TLINERA';
-    }
-  }
-
-  // Helper to prevent hanging promises
   private async withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     return Promise.race([
       promise,
@@ -307,181 +134,169 @@ export class LineraService {
     ]);
   }
 
-  // New Method: Check Chain Status directly
-  async getChainInfo(chainId: string): Promise<any> {
-      console.warn('[Linera] getChainInfo via direct fetch is disabled. Returning mock/empty to prevent errors.');
-      return null;
-  }
-
-  async queryApplicationDirect(chainId: string, applicationId: string, query: string): Promise<any> {
-    throw new Error('Direct application GraphQL not supported on public faucet');
-  }
-
-  async checkConnectivity(): Promise<boolean> {
-    try {
-      console.log('[Linera] Checking connectivity...');
-      await this.init();
-      
-      // Optimistic check: if we have a client and wallet, we are "ready"
-      // We will try to ping validators, but if it times out, we might still be "connected" to the local state.
-      // However, for "Linera status" in UI, we want network connectivity.
-      
-      if (this.client) {
+  async createWalletAndClaimChain(): Promise<{
+    address: string;
+    microchain: string;
+    signer: any; // Changed to any to allow PrivateKey or EvmSigner
+  }> {
+    await this.init();
+    
+    let signer: any;
+    let ownerStr: string;
+    
+    let mnemonic = typeof window !== 'undefined' ? localStorage.getItem('linera_mnemonic') : null;
+    if (!mnemonic) {
         try {
-          const frontend = await this.client.frontend();
-          // Timeout after 5 seconds
-          const info = await this.withTimeout(frontend.validatorVersionInfo(), 5000, 'validatorVersionInfo');
-          const ok = Array.isArray(info?.validators) ? info.validators.length > 0 : Boolean(info);
-          console.log('[Linera] Connectivity check result:', ok);
-          return ok;
-        } catch (e) {
-          console.warn('[Linera] Connectivity check failed (validators unreachable or timeout)', e);
-          return false;
+            const { Wallet } = await import('ethers');
+            const w = Wallet.createRandom();
+            mnemonic = w.mnemonic!.phrase;
+            if (typeof window !== 'undefined') localStorage.setItem('linera_mnemonic', mnemonic);
+        } catch {
+            signer = await EvmSigner.generate();
         }
-      }
-      
-      // If no client yet, check if wallet exists in storage
-      const wallet = await this.lineraModule.InMemoryWallet.read();
-      const hasWallet = Boolean(wallet);
-      console.log('[Linera] Connectivity check: No client, wallet exists:', hasWallet);
-      return hasWallet;
+    }
+    if (!signer) {
+        signer = await LineraSignerHelper.createSigner(mnemonic as string);
+    }
+    ownerStr = typeof (signer as any).address === 'function' ? (signer as any).address() : (signer as any).address;
+
+    const faucet = new this.lineraModule.Faucet(this.faucetUrl);
+    
+    const wallet = await faucet.createWallet();
+    const chainId = await faucet.claimChain(wallet, ownerStr);
+    console.log('[Linera] Wallet created and chain claimed', { owner: ownerStr, chainId });
+
+    // Persist client
+    const clientRet = new this.lineraModule.Client(wallet, signer, false);
+    const isClientInstance = clientRet && typeof clientRet === 'object' && typeof (clientRet as any).balance === 'function';
+    if (isClientInstance) {
+        this.client = clientRet;
+    } else if (typeof clientRet === 'number') {
+        this.client = this.lineraModule.Client.__wrap(clientRet);
+    } else if (clientRet && typeof (clientRet as any).then === 'function') {
+        const awaited = await (clientRet as Promise<any>);
+        this.client = awaited && typeof awaited === 'number' ? this.lineraModule.Client.__wrap(awaited) : awaited;
+    } else {
+        throw new Error('Unexpected Client constructor return value');
+    }
+    
+    try { await this.client.identity(); } catch {}
+    
+    return { address: (typeof (signer as any).address === 'function' ? (signer as any).address() : (signer as any).address), microchain: chainId, signer };
+  }
+
+  async primeClientFromStorage(signer: any): Promise<boolean> {
+    try {
+        await this.init();
+        const wallet = await this.lineraModule.InMemoryWallet.read();
+        if (wallet) {
+            const clientRet = new this.lineraModule.Client(wallet, signer, false);
+            const isClientInstance = clientRet && typeof clientRet === 'object' && typeof (clientRet as any).balance === 'function';
+            if (isClientInstance) {
+                this.client = clientRet;
+            } else if (typeof clientRet === 'number') {
+                this.client = this.lineraModule.Client.__wrap(clientRet);
+            } else if (clientRet && typeof (clientRet as any).then === 'function') {
+                const awaited = await (clientRet as Promise<any>);
+                this.client = awaited && typeof awaited === 'number' ? this.lineraModule.Client.__wrap(awaited) : awaited;
+            } else {
+                throw new Error('Unexpected Client constructor return value');
+            }
+            return true;
+        }
+        return false;
     } catch (e) {
-      console.warn('[Linera] Connectivity check fatal error', e);
-      return false;
+        console.warn('[Linera] primeClientFromStorage failed', e);
+        return false;
     }
   }
 
   async getBalance(
     address: string, 
     microchain: string, 
-    signer: EvmSigner
+    signer: any
   ): Promise<string> {
-    console.log('[Linera] getBalance called', { address, microchain });
-    const query = `
-      query GetBalance($chainId: ChainId!) {
-        chain(chainId: $chainId) {
-          executionState {
-            system {
-              balance
-            }
-          }
-        }
-      }
-    `;
-
     try {
-      await this.init();
-      console.log('[Linera] getBalance: WASM initialized');
-      const client = await this.getClient(signer, microchain);
-      console.log('[Linera] Requesting balance via SDK client...');
-      
-      // Timeout after 10 seconds for balance check
-      const b = await this.withTimeout(client.balance(), 10000, 'client.balance');
-      
-      console.log('[Linera] Client SDK balance', { chainId: microchain, balance: b });
-      return b && b.length ? b : '0';
+        await this.init();
+        if (!this.client) {
+             await this.primeClientFromStorage(signer);
+        }
+        if (!this.client) throw new Error('Client not initialized');
+
+        console.log('[Linera] Requesting balance via SDK client...');
+        const b = String(await this.withTimeout(this.client.balance(), 10000, 'client.balance'));
+        console.log('[Linera] Client SDK balance', { chainId: microchain, balance: b });
+        return b && b.length ? b : '0';
     } catch (e) {
-      console.warn('[Linera] SDK balance check failed', e);
-      try {
-        // Fallback is likely to fail if faucet doesn't proxy, but leaving it just in case
-        const res = await fetch('/api/linera-balance', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chainId: microchain }) });
-        const json = await res.json();
-        if (json?.balance != null) {
-          console.log('[Linera] Fallback API balance', { chainId: microchain, balance: json.balance });
-          return String(json.balance);
-        }
-      } catch (e2) {
-        console.warn('[Linera] Fallback API balance failed', e2);
-      }
-      return '0';
+        console.warn('[Linera] getBalance failed', e);
+        return '0';
     }
   }
 
-  async queryChainDirect(chainId: string, query: string, variables?: Record<string, any>): Promise<any> {
-    // Public faucet does not support chain GraphQL. Use WASM client.
-    throw new Error('Direct chain GraphQL not supported on public faucet');
+  async getApplication(signer: any, applicationId: string, chainId?: string) {
+      await this.init();
+      if (!this.client) await this.primeClientFromStorage(signer);
+      const frontend = await this.client.frontend();
+      const app = await frontend.application(applicationId);
+      console.log('[Linera] Application loaded via WASM', { applicationId });
+      return app;
   }
 
-  subscribeNotifications(
-    chainId: string,
-    wsUrl: string,
-    onStatus?: (status: string) => void,
-    onNotification?: (payload: any) => void
-  ): { unsubscribe: () => void } {
-    const finalWs = wsUrl || this.defaultWs;
-    if (!finalWs || !chainId) {
-      console.warn('[Linera] Missing wsUrl or chainId for subscription');
-      return { unsubscribe: () => {} };
-    }
-    const protocol = 'graphql-transport-ws';
-    const ws = new WebSocket(finalWs, protocol);
-    this.ws = ws;
-    const heartbeatInterval = 15000;
-    let hb: any = null;
-    const send = (msg: any) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
-    const startHeartbeat = () => {
-      hb = setInterval(() => send({ type: 'ping' }), heartbeatInterval);
-    };
-    const stopHeartbeat = () => { if (hb) { clearInterval(hb); hb = null; } };
-    ws.onopen = () => {
-      onStatus?.('🟢 WebSocket connected');
-      send({ type: 'connection_init' });
-      startHeartbeat();
-    };
-    ws.onmessage = (ev) => {
+  async getTokenBalance(owner: string, applicationId: string, signer: any, chainId?: string): Promise<string> {
       try {
-        const msg = JSON.parse(ev.data);
-        if (msg.type === 'connection_ack') {
-          onStatus?.('✅ Connection acknowledged');
-          const sub = {
-            id: 'chain_notifications',
-            type: 'subscribe',
-            payload: { query: `subscription { notifications(chainId: "${chainId}") }` }
-          };
-          console.log('[Linera] Subscribing to chain notifications', sub);
-          send(sub);
-        } else if (msg.type === 'next' && msg.id === 'chain_notifications') {
-          console.log('[Linera] Notification', msg.payload);
-          onNotification?.(msg.payload);
-        } else if (msg.type === 'error') {
-          console.error('[Linera] WS error message', msg);
-          const errMsg = Array.isArray(msg.payload?.errors) && msg.payload.errors.length ? msg.payload.errors[0]?.message : 'Unknown error';
-          if (String(errMsg).includes('Schema is not configured for subscriptions')) {
-            onStatus?.('⚠️ Subscriptions not supported on this endpoint');
-            try { send({ id: 'chain_notifications', type: 'complete' }); } catch {}
-            try { ws.close(); } catch {}
-            stopHeartbeat();
-            this.ws = null;
-            return;
+          const app = await this.getApplication(signer, applicationId, chainId);
+          // Try standard query shapes
+          const shapes = [
+            `query { accounts { entry(key: "${owner}") { value } } }`,
+            `query { accounts { entry(key: { Address: "${owner}" }) { value } } }`,
+          ];
+          for (const q of shapes) {
+              try {
+                  const res = await app.query(q);
+                  const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+                  const val = parsed?.data?.accounts?.entry?.value;
+                  if (val != null) return String(val);
+              } catch {}
           }
-          onStatus?.('❌ WebSocket error');
-        } else if (msg.type === 'complete') {
-          onStatus?.('🟡 Subscription completed');
-        }
+          return '0';
       } catch (e) {
-        console.error('[Linera] WS parse error', e);
+          console.warn('[Linera] getTokenBalance failed', e);
+          return '0';
       }
-    };
-    ws.onclose = () => {
-      onStatus?.('🔴 WebSocket disconnected');
-      stopHeartbeat();
-      // Simple reconnect
-      if (!this.wsReconnectTimer) {
-        this.wsReconnectTimer = setTimeout(() => {
-          this.wsReconnectTimer = null;
-          this.subscribeNotifications(chainId, wsUrl, onStatus, onNotification);
-        }, 5000);
+  }
+  
+  async getTickerSymbol(applicationId: string, signer: any, chainId?: string): Promise<string> {
+      try {
+          const app = await this.getApplication(signer, applicationId, chainId);
+          const res = await app.query('query { ticker_symbol }');
+          const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+          return String(parsed?.data?.ticker_symbol ?? 'TLINERA');
+      } catch (e) {
+          return 'TLINERA';
       }
-    };
-    ws.onerror = (err) => {
-      console.error('[Linera] WebSocket error', err);
-    };
-    const unsubscribe = () => {
-      try { send({ id: 'chain_notifications', type: 'complete' }); } catch {}
-      try { ws.close(); } catch {}
-      stopHeartbeat();
-      this.ws = null;
-    };
-    return { unsubscribe };
+  }
+
+  async checkConnectivity(): Promise<boolean> {
+      try {
+          await this.init();
+          if (this.client) {
+              try {
+                  const b = await this.withTimeout(this.client.balance(), 5000, 'ping-balance');
+                  return typeof b === 'string' ? b.length > 0 : Boolean(b);
+              } catch {
+                  return false;
+              }
+          }
+          const wallet = await this.lineraModule.InMemoryWallet.read();
+          return Boolean(wallet);
+      } catch {
+          return false;
+      }
+  }
+
+  onNotification(callback: (n: any) => void) {
+      if (this.client) {
+          this.client.onNotification(callback);
+      }
   }
 }

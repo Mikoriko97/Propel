@@ -1,0 +1,1 @@
+self.onmessage=t=>{let[e,a,o,r]=t.data;(async()=>{try{let t=await import(e);t.initSync({module:a,memory:o}),await t.wasm_thread_entry_point(r)}catch(t){throw console.error(t),setTimeout(()=>{throw t}),t}close()})()};

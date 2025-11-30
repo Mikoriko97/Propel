@@ -25,6 +25,14 @@ const nextConfig = {
       ...(config.experiments || {}),
       asyncWebAssembly: true,
     };
+    // Ignore optional native deps from ws used by ethers in server bundle
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      ws: false,
+      'bufferutil': false,
+      'utf-8-validate': false,
+    };
     return config;
   },
 };

@@ -17,7 +17,8 @@ import type { User } from '@supabase/supabase-js';
 type Role = 'developer' | 'investor';
 type Project = { id: string; title: string; category: string; status: string };
 
-import { LineraService, EvmSigner } from '@/lib/linera-client';
+import { LineraService, LineraSignerHelper } from '@/lib/linera-client';
+import { PrivateKey } from '@linera/signer';
 
 export default function ProfilePage() {
   const [role, setRole] = useState<Role | ''>('');
@@ -43,24 +44,24 @@ export default function ProfilePage() {
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false);
   const [blockHeight, setBlockHeight] = useState<string>('');
   const [chainOwner, setChainOwner] = useState<string>('');
-  const [signer, setSigner] = useState<EvmSigner | null>(null);
+  const [signer, setSigner] = useState<PrivateKey | null>(null);
   const [wsStatus, setWsStatus] = useState<string>('');
   const wsUnsubRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
     const loadSigner = async () => {
-      const stored = localStorage.getItem('linera_wallet_signer');
-      if (stored) {
+      const mnemonic = await LineraSignerHelper.loadMnemonic();
+      if (mnemonic) {
         try {
-          const s = await EvmSigner.fromJson(stored);
+          const s = await LineraSignerHelper.createSigner(mnemonic);
           setSigner(s);
           try {
             const service = LineraService.getInstance();
             await service.primeClientFromStorage(s);
-          } catch {}
+          } catch { }
         } catch (e) {
-          console.error('Invalid stored signer', e);
-          localStorage.removeItem('linera_wallet_signer');
+          console.error('Invalid stored mnemonic', e);
+          localStorage.removeItem('linera_mnemonic');
         }
       }
     };
@@ -214,26 +215,25 @@ export default function ProfilePage() {
     try {
       const service = LineraService.getInstance();
       const result = await service.createWalletAndClaimChain();
-      
+
       setSigner(result.signer);
       setLineraAddress(result.address);
       setLineraMicrochain(result.microchain);
-      
-      const json = await result.signer.toJson();
-      localStorage.setItem('linera_wallet_signer', json);
-      
-      setProfileData((prev: any) => ({ 
-        ...(prev || {}), 
-        linera_address: result.address, 
-        linera_microchain: result.microchain 
+
+      // Мнемоніка вже збережена в createWalletAndClaimChain
+
+      setProfileData((prev: any) => ({
+        ...(prev || {}),
+        linera_address: result.address,
+        linera_microchain: result.microchain
       }));
-      
+
       try {
-        const { error } = await supabase.from('profiles').upsert({ 
+        const { error } = await supabase.from('profiles').upsert({
           id: userId,
-          user_id: userId, 
-          linera_address: result.address, 
-          linera_microchain: result.microchain 
+          user_id: userId,
+          linera_address: result.address,
+          linera_microchain: result.microchain
         }, { onConflict: 'user_id' });
         if (error) throw error;
         toast({ title: 'Done', description: 'Linera wallet created.' });
@@ -243,9 +243,9 @@ export default function ProfilePage() {
       }
     } catch (e: any) {
       console.error('Linera Wallet Creation Error:', e);
-      toast({ 
-        title: 'Creation error', 
-        description: `Details: ${e?.message || JSON.stringify(e) || 'Unknown error'}` 
+      toast({
+        title: 'Creation error',
+        description: `Details: ${e?.message || JSON.stringify(e) || 'Unknown error'}`
       });
     } finally {
       setCreatingWallet(false);
@@ -257,14 +257,14 @@ export default function ProfilePage() {
     setSigner(null);
     setLineraAddress('');
     setLineraMicrochain('');
-    localStorage.removeItem('linera_wallet_signer');
-    
+    localStorage.removeItem('linera_mnemonic');
+
     if (userId) {
-       await supabase.from('profiles').upsert({ 
+      await supabase.from('profiles').upsert({
         id: userId,
-        user_id: userId, 
-        linera_address: null, 
-        linera_microchain: null 
+        user_id: userId,
+        linera_address: null,
+        linera_microchain: null
       }, { onConflict: 'user_id' });
     }
     toast({ title: 'Reset', description: 'Wallet disconnected.' });
@@ -292,7 +292,7 @@ export default function ProfilePage() {
         setTlinBalance('');
         setTicker('');
       }
-      
+
     } catch (e) {
       console.error('[Profile] Balance check error:', e);
       setTlinBalance('');
@@ -320,7 +320,7 @@ export default function ProfilePage() {
     return () => clearInterval(id);
   }, []);
 
-  
+
 
   useEffect(() => {
     if (!userId || !lineraAddress || !lineraMicrochain || !signer) return;
@@ -434,17 +434,17 @@ export default function ProfilePage() {
               <div className="text-sm font-semibold mb-3">Linera wallet</div>
               {lineraAddress ? (
                 <>
-                <div className="grid gap-3">
-                  <div>
-                    <div className="text-xs text-foreground/60">Address</div>
-                    <div className="font-mono break-all">{lineraAddress}</div>
+                  <div className="grid gap-3">
+                    <div>
+                      <div className="text-xs text-foreground/60">Address</div>
+                      <div className="font-mono break-all">{lineraAddress}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-foreground/60">Microchain</div>
+                      <div className="font-mono break-all">{lineraMicrochain}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs text-foreground/60">Microchain</div>
-                    <div className="font-mono break-all">{lineraMicrochain}</div>
-                  </div>
-                </div>
-                <Button onClick={resetWallet} variant="outline" className="mt-4 w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300">Reset wallet</Button>
+                  <Button onClick={resetWallet} variant="outline" className="mt-4 w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300">Reset wallet</Button>
                 </>
               ) : (
                 <Button onClick={createLineraWallet} disabled={creatingWallet} className="mt-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl">Create Linera wallet</Button>
