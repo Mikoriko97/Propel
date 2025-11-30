@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     headers.set('Content-Type', contentType);
     headers.set('Cross-Origin-Resource-Policy', 'same-origin');
     headers.set('Cache-Control', 'public, max-age=300');
-    return new NextResponse(Buffer.from(buf), { status: 200, headers });
+    return new Response(buf, { status: 200, headers });
   } catch (e) {
     return new NextResponse('Proxy error', { status: 500 });
   }

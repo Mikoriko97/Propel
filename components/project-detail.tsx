@@ -437,7 +437,11 @@ export function ProjectDetail({ id }: { id: string }) {
                   <div key={i} className="rounded-xl border border-white/10 p-4">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
-                        {c.avatar ? <AvatarImage src={c.avatar} alt={c.nickname || ''} /> : <AvatarFallback>{(c.nickname || 'U').slice(0,2).toUpperCase()}</AvatarFallback>}
+                        {c.avatar ? (
+                          <AvatarImage src={`/api/proxy-image?url=${encodeURIComponent(c.avatar)}`} alt={c.nickname || ''} />
+                        ) : (
+                          <AvatarFallback>{(c.nickname || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                        )}
                       </Avatar>
                       <div className="text-sm font-medium">{c.nickname || 'User'}</div>
                       <div className="ml-auto text-xs text-foreground/60">{new Date(c.created_at).toLocaleString()}</div>
