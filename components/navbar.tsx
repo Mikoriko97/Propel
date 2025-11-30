@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseConfigured } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { toast } from '@/hooks/use-toast';
 
 export function Navbar() {
   const [user, setUser] = useState<User | null>(null);
@@ -27,7 +28,16 @@ export function Navbar() {
   }, []);
 
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: window.location.origin } });
+    try {
+      if (!supabaseConfigured) {
+        toast({ title: 'Supabase not configured', description: 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Netlify environment.' });
+        return;
+      }
+      await supabase.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: window.location.origin } });
+    } catch (e: any) {
+      console.error('OAuth error:', e);
+      toast({ title: 'Login failed', description: e?.message || 'OAuth error' });
+    }
   };
 
   const handleLogout = async () => {

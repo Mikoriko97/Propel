@@ -47,3 +47,5 @@ export const supabase: SupabaseClient =
         return client;
       })())
     : createStubClient();
+
+export const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) && Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
